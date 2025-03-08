@@ -1,0 +1,4 @@
+log.lammps
+test*.pl
+**/
+*test*

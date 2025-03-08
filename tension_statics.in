@@ -1,0 +1,127 @@
+
+#This lammps script allows you to do the tensile simulation using molecular statics for a larger system
+#developed by Prof. Shin-Pon Ju at NSYSU 2025/02/17
+
+#define parameters here
+#log HEA.log ## Perl
+plugin load libdeepmd_lmp.so
+variable jumpname index tension.in # for "jump" filename ==> Perl
+variable folder index HEA_Tension
+variable samplepxx equal pxx
+variable samplepyy equal pyy
+variable samplepzz equal pzz
+variable currentT equal 300
+variable ts equal 0.001 # for units metal: 1fs 
+variable pdamp equal ${ts}*1000
+shell rmdir ${folder}
+shell mkdir ${folder}
+
+#INITIALIZATION
+
+units metal 
+dimension 3 
+boundary p p p 
+atom_style atomic
+atom_modify map array
+# ---------- Create Atoms ---------------------
+read_data	./SnTe_mp-1883-T50-P0.data
+
+#reset_atom_ids
+replicate 8 8 12
+write_data dup_8_8_12.data
+
+# ---------- Define Interatomic Potential --------------------- 
+#pair_style_anchor
+pair_style deepmd /home/jsp/SnPbTe_alloys/dp_train_new/dp_train/graph01/graph-compress01.pb
+pair_coeff * *  
+#pair_style tersoff
+#pair_coeff * * BNC.tersoff B N 
+#---------------------------------------------
+############jump ${jumpname} npt2    ################
+
+neighbor 1 bin 
+neigh_modify delay 10 every 5 check yes 
+
+shell cd ${folder}
+
+reset_timestep 0
+timestep 1e-3 #only for fire optimizer 
+fix 5 all box/relax  aniso 0.0
+min_style	  cg
+thermo 100
+thermo_style custom step temp  density pxx  pyy  pzz pe press
+dump 2 all custom 500 00min4relax_*.cfg id type x y z
+minimize 1e-25 1e-25 50000 100000
+unfix 5
+undump 2
+
+# ----- Find the initial structure-------
+
+variable lztemp equal lz
+
+reset_timestep 0
+fix 1 all box/relax x 0.0 y 0.0 z 100.0
+thermo 100
+thermo_style custom step temp lz pxx pyy pzz  
+dump 2 all custom 500 00min4tesion_*.cfg id type x y z
+minimize 1e-25 1e-25 50000 100000 
+undump 2
+unfix 1
+shell cd ..
+
+######get the refernce length
+
+variable lz equal lz
+variable tmp equal "lz"
+variable L0 equal ${tmp}
+variable tenratio equal 0.002                 #######################
+variable strain equal "(lz - v_L0)/v_L0"
+variable p1 equal "v_strain"
+variable currentzlo equal zlo
+
+######## tensile simulation from here #######
+
+variable i loop 1000 ##tension loop begin
+
+label tension_i
+
+variable zten equal ${L0}+(${tenratio}*${L0})*(${i}-1)+${currentzlo}
+change_box all z final ${currentzlo} ${zten} remap units box
+
+#####The following is for relaxation
+
+reset_timestep 0
+variable totalE equal pe
+
+fix 1 all box/relax x 0.0 y 0.0
+thermo 100
+thermo_style custom step temp lz pxx pyy pzz  
+minimize 1e-25 1e-25 50000 100000 
+unfix 1
+
+#####The following is to dump cfg for showing results 
+
+shell cd ${folder}
+
+# end of statics way
+variable avePE equal pe
+variable avepxx equal pxx
+variable avepyy equal pyy
+variable avepzz equal pzz
+
+variable pxxGPa equal -${avepxx}/10000 #bar to Gpa
+variable pyyGPa equal -${avepyy}/10000
+variable pzzGPa equal -${avepzz}/10000
+
+print "lz: $(lz) Vol: $(vol) PE: ${avePE}  Pxx: ${pxxGPa} Pyy: ${pyyGPa} Pzz: ${pzzGPa} " append Strain_Stress.dat screen no
+###################################
+unfix 1
+dump 1 all custom 1 00stress_${i}.cfg id type x y z 
+run 0
+undump 1
+shell cd ..
+next i
+jump SELF tension_i
+
+print "Simulation done!!!"
+
