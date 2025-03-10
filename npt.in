@@ -1,0 +1,66 @@
+print "Simulating /home/junwen/NPT_final/initial/SWNT_Orthogonal_min-30_Al_0.0675.data"
+units metal 
+dimension 3 
+boundary p p p 
+box tilt large
+atom_style atomic 
+atom_modify map array 
+shell mkdir lmp_output
+# ---------- input data to read --------------------- 
+read_data SWNT_Orthogonal_min-30_Fe_0.0198.data
+#replicate 2 2 3
+variable timesize equal 0.0002
+variable temp equal ${start_temp}
+variable temp equal ${end_temp}
+
+variable press equal 0.0
+variable tdamp equal ${timesize}*100
+variable pdamp equal ${timesize}*1000
+timestep ${timesize}
+
+# ---------- Define Interatomic Potential ---------------------
+pair_style deepmd /home/junwen/pb/final/graph-compress01.pb
+pair_coeff * *
+
+#----------------------------------------------
+neighbor 1.0 bin
+neigh_modify delay 10 every 5 check yes one 5000
+
+#-----------------minimize---------------------
+shell cd lmp_output
+fix 5 all box/relax z 0.0
+thermo 100
+thermo_style custom step density pxx pyy pzz pe
+dump 1 all custom 200 MIN_*.cfg id type x y z xu yu zu
+minimize 0.0 0.0 20000 20000
+unfix 5
+undump 1
+shell cd ..
+
+write_data after_minimize.data
+
+shell cd lmp_output
+reset_timestep 0
+velocity all create ${start_temp} 89759 mom yes rot yes dist gaussian
+velocity all scale ${start_temp}
+
+thermo 200
+thermo_style custom step temp density pxx pyy pzz c_avg_pe
+# Define a compute to calculate per-atom potential energy
+compute pe_atom all pe/atom
+compute avg_pe all reduce ave c_pe_atom
+
+# Print headers for the CSV file
+print "step,temp,density,pxx,pyy,pzz,avg_pe" file DLP.csv screen no
+fix 1 all npt temp ${start_temp} ${end_temp} ${tdamp} z ${press} ${press} ${pdamp}
+fix printdata all print 100 "$(step),$(temp),$(density),$(pxx),$(pyy),$(pzz),$(c_avg_pe)" append DLP.csv screen no
+
+dump 1 all custom 200 NPT_*.cfg id type x y z xu yu zu
+run 200000
+unfix 1
+unfix printdata
+undump 1
+shell cd ..
+
+write_data after_NPT.data
+print "ALL DONE!"

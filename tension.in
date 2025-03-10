@@ -10,7 +10,7 @@ variable folder index HEA_Tension
 variable samplepxx equal pxx
 variable samplepyy equal pyy
 variable samplepzz equal pzz
-variable currentT equal 300.0
+variable currentT equal 100.0
 variable ts equal 0.001 # for units metal: 1fs 
 variable pdamp equal ${ts}*1000
 variable tdamp equal ${ts}*100
@@ -25,15 +25,15 @@ boundary p p p
 atom_style atomic
 atom_modify map array
 # ---------- Create Atoms or read the data file ---------------------
-read_data	./Optimized.data
+read_data	/home/jsp1/AlP/lmp_product/A_AlPNT33/A_AlPNT33.data
 #read_data	./SnTe_mp-1883-T50-P0.data
 
-#replicate 8 8 12
-#write_data dup_8_8_12.data #if needed
+replicate 1 1 25
+write_data dup_1_1_25.data #if needed
 
 # ---------- Define Interatomic Potential --------------------- 
 #pair_style_anchor
-pair_style deepmd /home/jsp/SnPbTe_alloys/dp_train_new/dp_train/graph01/graph-compress01.pb
+pair_style deepmd /home/jsp1/AlP/dp_train_new/dp_train/graph01/graph-compress01.pb
 pair_coeff * *  
 #---------------------------------------------
 ############jump ${jumpname} npt2    ################
@@ -41,12 +41,14 @@ pair_coeff * *
 neighbor 1 bin 
 neigh_modify delay 10 every 5 check yes 
 
+fix 5 all box/relax  z 0.0 
 #fix 5 all box/relax  aniso 0.0 
-#min_style	  cg
-#thermo 100
-#thermo_style custom step temp  density pxx  pyy  pzz pe press
-#minimize 1e-25 1e-25 5000 10000
-#unfix 5
+min_style	  cg
+thermo 100
+thermo_style custom step temp  density pxx  pyy  pzz pe press
+minimize 1e-25 1e-25 5000 10000
+unfix 5
+write_data minimized.data
 
 #NPT
 timestep ${ts}
@@ -56,11 +58,12 @@ velocity all create ${currentT} 12345 mom yes rot yes dist gaussian
 velocity all scale ${currentT}
 
 reset_timestep 0
-fix 1 all npt temp ${currentT} ${currentT} ${tdamp} aniso 0.0 0.0 ${pdamp}
+fix 1 all npt temp ${currentT} ${currentT} ${tdamp} z 0.0 0.0 ${pdamp}
+#fix 1 all npt temp ${currentT} ${currentT} ${tdamp} aniso 0.0 0.0 ${pdamp}
 thermo 200  
 thermo_style custom step temp density pxx pyy pzz pe  cella cellb cellc pe 
 dump 1 all custom 1000 00NPT1_*.cfg id type x y z
-run 1000
+run 10000
 unfix 1
 undump 1
 write_data  NPT1.data 
@@ -82,16 +85,20 @@ variable lztemp equal lz
 shell cd ${folder}
 
 reset_timestep 0
-fix 1 all npt temp ${currentT} ${currentT} ${tdamp} x 0.0 0.0 ${pdamp} y 0.0 0.0 ${pdamp} z 500.0 500.0 ${pdamp}
+fix 1 all npt temp ${currentT} ${currentT} ${tdamp} z 10.0 10.0 ${pdamp}
+#fix 1 all npt temp ${currentT} ${currentT} ${tdamp} x 0.0 0.0 ${pdamp} y 0.0 0.0 ${pdamp} z 500.0 500.0 ${pdamp}
 thermo 100
 thermo_style custom step temp lz pxx pyy pzz  
 dump 2 all custom 500 00NPT4tesion_*.cfg id type x y z
-run 500  
+run 5000  
 
 unfix 1
 #unfix 2
 #unfix 3
 undump 2
+
+write_data  NPT2.data 
+
 shell cd .. 
 
 ######get the refernce length
@@ -99,7 +106,7 @@ shell cd ..
 variable lz equal lz
 variable tmp equal "lz"
 variable L0 equal ${tmp}
-variable tenratio equal 0.002                 #######################
+variable tenratio equal 0.001                 #######################
 variable strain equal "(lz - v_L0)/v_L0"
 variable p1 equal "v_strain"
 variable currentzlo equal zlo
@@ -120,20 +127,26 @@ change_box all z final ${currentzlo} ${zten} remap units box
 reset_timestep 0
 variable totalE equal pe
 
+shell cd ${folder}
+
 #fix 1 all nve
-fix 1 all npt temp ${currentT} ${currentT} ${tdamp} x 0.0 0.0 ${pdamp} y 0.0 0.0 ${pdamp}       ##########modify
+fix 1 all nvt temp ${currentT} ${currentT} ${tdamp}       ##########modify
+#fix 1 all npt temp ${currentT} ${currentT} ${tdamp} x 0.0 0.0 ${pdamp} y 0.0 0.0 ${pdamp}       ##########modify
 #fix 2 all temp/rescale 1 ${currentT} ${currentT} 1 1
 #fix 3 all press/berendsen x 0.0 0.0 ${pdamp} y 0.0 0.0 ${pdamp} modulus 1000 #making it a little compressed
 thermo 100 
 thermo_style custom step temp pe lz pzz v_p1 v_totalE
+dump 1 all custom 200 Equstress_${i}_*.cfg id type x y z
+
 run 3000     #2500
 unfix 1
+undump 1
 #unfix 2
 #unfix 3
 
 #####The following is to dump cfg for sampling (10 cfg files)
 
-shell cd ${folder}
+#shell cd ${folder}
 
 # dynamical way
 
@@ -148,7 +161,8 @@ shell cd ${folder}
 reset_timestep 0
 
 # end of statics way
-fix 1 all npt temp ${currentT} ${currentT} ${tdamp}  x 0.0 0.0 ${pdamp} y 0.0 0.0 ${pdamp}      ##########modify
+fix 1 all nvt temp ${currentT} ${currentT} ${tdamp} #  x 0.0 0.0 ${pdamp} y 0.0 0.0 ${pdamp}      ##########modify
+#fix 1 all npt temp ${currentT} ${currentT} ${tdamp}  x 0.0 0.0 ${pdamp} y 0.0 0.0 ${pdamp}      ##########modify
 #fix 1 all nve
 #fix 2 all temp/rescale 1 ${currentT} ${currentT} 1 1
 #fix 3 all press/berendsen x 0.0 0.0 100 y 0.0 0.0 100 modulus 1000 #making it a little compressed
@@ -189,6 +203,8 @@ unfix avexx
 unfix aveyy
 unfix avezz
 undump 1
+
+write_data  00loop_${i}.data 
 
 dump 1 all custom 1 00stress_${i}.cfg id type x y z 
 run 0
