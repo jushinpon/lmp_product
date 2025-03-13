@@ -1,4 +1,3 @@
-print "Simulating /home/junwen/NPT_final/initial/SWNT_Orthogonal_min-30_Al_0.0675.data"
 units metal 
 dimension 3 
 boundary p p p 
