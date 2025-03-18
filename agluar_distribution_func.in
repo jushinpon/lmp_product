@@ -1,0 +1,18 @@
+units metal           
+dimension 3
+boundary p p p        
+atom_style atomic
+neighbor 2 bin
+neigh_modify every 5 delay 10
+timestep 0.001
+
+read_data /home/shaohan/final_potential/adf/data/p6m2/p6m2_Coord_0.data
+
+pair_style none
+comm_modify cutoff 6
+
+compute gofa1 all adf  60 1 * * 1.5 2.2 1.5 2.2     
+fix 1 all ave/time 10 100 1000 c_gofa1[*] file angle_data1.dat mode vector
+run 1000
+
+
